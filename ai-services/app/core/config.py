@@ -8,7 +8,7 @@ from pathlib import Path
 
 # --- Ollama ---
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama3")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
 # --- Vector Store ---
@@ -25,7 +25,7 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 
 # --- Retrieval ---
 RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "5"))
-RELEVANCE_SCORE_THRESHOLD = float(os.getenv("RELEVANCE_SCORE_THRESHOLD", "0.3"))
+RELEVANCE_SCORE_THRESHOLD = float(os.getenv("RELEVANCE_SCORE_THRESHOLD", "0.6"))
 
 # --- Upload ---
 UPLOAD_DIR = BASE_DIR / "data" / "uploads"

@@ -58,7 +58,7 @@ ensure_model() {
 }
 
 log "${BOLD}Checking Ollama models...${NC}"
-ensure_model "llama3"
+ensure_model "qwen2.5:7b"
 ensure_model "nomic-embed-text"
 
 # ============================================================

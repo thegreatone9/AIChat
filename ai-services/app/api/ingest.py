@@ -17,7 +17,7 @@ router = APIRouter(prefix="/ai", tags=["ingestion"])
 
 
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest_document(file: UploadFile = File(...)):
+def ingest_document(file: UploadFile = File(...)):
     """
     Upload and ingest a PDF document into the knowledge base.
     Extracts text, chunks it, generates embeddings, and stores in ChromaDB.
@@ -69,7 +69,7 @@ async def ingest_document(file: UploadFile = File(...)):
 
 
 @router.delete("/documents/{doc_id}", response_model=DeleteResponse)
-async def delete_document(doc_id: str):
+def delete_document(doc_id: str):
     """
     Remove all embeddings for a specific document from the vector store.
     """

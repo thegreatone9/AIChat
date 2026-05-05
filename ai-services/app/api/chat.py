@@ -10,7 +10,7 @@ router = APIRouter(prefix="/ai", tags=["chat"])
 
 
 @router.post("/query", response_model=ChatResponse)
-async def chat_query(request: ChatRequest):
+def chat_query(request: ChatRequest):
     """
     Send a question to the RAG pipeline.
     Retrieves relevant context from the knowledge base and generates an answer.
