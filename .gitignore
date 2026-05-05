@@ -37,6 +37,8 @@ client/*.local
 server/node_modules/
 server/dist/
 server/logs/
+server/data/
+server/uploads/
 server/*.log
 
 # ===========================
@@ -58,6 +60,7 @@ ai-services/.ruff_cache/
 # Vector store / FAISS / Chroma persisted data
 ai-services/data/vector_store/
 ai-services/data/chroma_db/
+ai-services/data/uploads/
 
 # Model artifacts (too large for git)
 ai-services/models/
