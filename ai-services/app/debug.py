@@ -1,47 +1,34 @@
 """
-Diagnostic script — checks ingestion status and retrieval scores.
-Run from the ai-services directory with the venv activated:
-  python -m app.debug
+Simulate: what would the re-chunked PDF look like for the Luxemburg query?
+Find chunks containing 'luxemburg' and show them.
 """
 
-from app.retrieval.vector_store import search, get_stats
-from app.core.config import RELEVANCE_SCORE_THRESHOLD
+from app.ingestion.loader import load_pdf
+from app.ingestion.splitter import split_text
+import glob
 
-print("=" * 50)
-print("VECTOR STORE STATS")
-print("=" * 50)
-stats = get_stats()
-print(f"  Total chunks: {stats['total_chunks']}")
-print(f"  Collection:   {stats['collection_name']}")
-print()
-
-if stats["total_chunks"] == 0:
-    print("⚠️  No chunks in vector store! The PDF was not ingested properly.")
+# Find the uploaded PDF
+upload_dir = "data/uploads"
+pdfs = glob.glob(f"{upload_dir}/*.pdf")
+if not pdfs:
+    print("No PDFs found in data/uploads/")
     exit(1)
 
-query = "what is value?"
-print(f"QUERY: \"{query}\"")
-print(f"RELEVANCE_SCORE_THRESHOLD: {RELEVANCE_SCORE_THRESHOLD}")
-print(f"(scores <= threshold are considered relevant)")
-print("=" * 50)
+pdf_path = pdfs[0]
+print(f"PDF: {pdf_path}")
+print(f"New chunk size: 500 chars, overlap: 100")
+print("=" * 60)
 
-results = search(query, top_k=10)
+text = load_pdf(pdf_path)
+chunks = split_text(text, "test")
 
-if not results:
-    print("⚠️  No results returned from ChromaDB at all!")
-else:
-    print(f"\nTop {len(results)} results:\n")
-    for i, r in enumerate(results):
-        status = "✅ PASS" if r["score"] <= RELEVANCE_SCORE_THRESHOLD else "❌ FILTERED OUT"
-        print(f"  [{i+1}] Score: {r['score']:.4f}  {status}")
-        print(f"      Doc: {r['metadata'].get('doc_id', '?')[:8]}...")
-        print(f"      Text: {r['content'][:120]}...")
-        print()
+print(f"Total chunks: {len(chunks)} (was ~50 at 1000 chars)\n")
 
-passing = [r for r in results if r["score"] <= RELEVANCE_SCORE_THRESHOLD]
-print(f"Chunks passing threshold: {len(passing)} / {len(results)}")
+# Find chunks mentioning Luxemburg
+lux_chunks = [c for c in chunks if "luxemburg" in c["content"].lower()]
+print(f"Chunks containing 'Luxemburg': {len(lux_chunks)}\n")
 
-if len(passing) == 0:
-    print(f"\n💡 FIX: The threshold ({RELEVANCE_SCORE_THRESHOLD}) is too strict.")
-    print(f"   Lowest score was {results[0]['score']:.4f}.")
-    print(f"   Recommend raising threshold to ~{min(results[0]['score'] * 1.5, 1.0):.2f}")
+for c in lux_chunks:
+    print(f"--- Chunk #{c['metadata']['chunk_index']} ---")
+    print(c["content"][:400])
+    print()

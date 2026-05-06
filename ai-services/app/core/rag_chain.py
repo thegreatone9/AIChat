@@ -59,11 +59,23 @@ def query(question: str) -> dict:
     # Step 1: Retrieve relevant chunks
     raw_results = search(question)
 
-    # Step 2: Filter by relevance (cosine distance — lower is better)
+    # Step 2: Filter by absolute relevance (cosine distance — lower is better)
     relevant_chunks = [
         r for r in raw_results
         if r["score"] <= RELEVANCE_SCORE_THRESHOLD
     ]
+
+    # Step 2b: Relative score gap — only keep chunks close to the best match.
+    # If the best chunk scores 0.20, a chunk at 0.50 is likely noise even
+    # though it passes the absolute threshold.  Keep chunks within 1.5x of
+    # the best score so only genuinely relevant ones survive.
+    if relevant_chunks:
+        best_score = relevant_chunks[0]["score"]  # already sorted by ChromaDB
+        score_cutoff = best_score * 1.5
+        relevant_chunks = [
+            r for r in relevant_chunks
+            if r["score"] <= score_cutoff
+        ]
 
     # Step 3: Handle no relevant context
     if not relevant_chunks:
@@ -89,20 +101,38 @@ def query(question: str) -> dict:
 
     response = llm.invoke(messages)
 
-    # Step 6: Collect source metadata
+    # Step 6: Check if the LLM declined to answer
+    answer_text = response.content
+    fallback_phrases = [
+        "couldn't find an answer",
+        "could not find an answer",
+        "not enough information",
+        "don't have enough context",
+        "no information available",
+        "not mentioned in",
+        "not covered in",
+    ]
+    is_fallback = any(phrase in answer_text.lower() for phrase in fallback_phrases)
+
+    if is_fallback:
+        return {
+            "answer": answer_text,
+            "sources": [],
+            "has_context": False,
+        }
+
+    # Step 7: Collect sources with text excerpts
     sources = []
-    seen_docs = set()
     for c in relevant_chunks:
-        doc_id = c["metadata"].get("doc_id", "unknown")
-        if doc_id not in seen_docs:
-            seen_docs.add(doc_id)
-            sources.append({
-                "doc_id": doc_id,
-                "score": round(c["score"], 4),
-            })
+        sources.append({
+            "doc_id": c["metadata"].get("doc_id", "unknown"),
+            "chunk_index": c["metadata"].get("chunk_index", 0),
+            "score": round(c["score"], 4),
+            "excerpt": c["content"][:300].strip(),
+        })
 
     return {
-        "answer": response.content,
+        "answer": answer_text,
         "sources": sources,
         "has_context": True,
     }

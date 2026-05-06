@@ -77,7 +77,11 @@ def add_documents(chunks: list[dict]) -> int:
 
 def search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list[dict]:
     """
-    Search the vector store for chunks relevant to the query.
+    Search with keyword fallback.
+
+    1. Try vector similarity search first.
+    2. If no results pass the relevance threshold, fall back to keyword
+       search in ChromaDB for proper nouns and specific terms.
 
     Args:
         query: User question.
@@ -90,6 +94,7 @@ def search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list[dict]:
     collection = _get_collection()
     embeddings = _get_embeddings()
 
+    # --- 1. Vector similarity search ---
     query_vector = embeddings.embed_query(query)
 
     results = collection.query(
@@ -111,7 +116,85 @@ def search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list[dict]:
                 "score": dist,
             })
 
-    return hits
+    # Check if vector search found anything useful.
+    # Two conditions must be met to trust vector results:
+    #   a) At least one result passes the relevance threshold
+    #   b) At least one passing result contains a significant query keyword
+    # This prevents trusting high-scoring but irrelevant results (common
+    # when the query contains proper nouns the embedding model doesn't handle).
+    from app.core.config import RELEVANCE_SCORE_THRESHOLD
+
+    stop_words = {
+        "what", "does", "how", "why", "who", "when", "where", "which",
+        "the", "is", "are", "was", "were", "been", "being", "have", "has",
+        "had", "did", "will", "would", "could", "should", "can", "may",
+        "about", "from", "with", "that", "this", "for", "and", "but",
+        "not", "they", "them", "their", "its", "into", "also", "than",
+        "then", "more", "most", "such", "like", "argue", "between",
+    }
+    significant_words = [
+        w.strip("?.,!\"'()").lower()
+        for w in query.split()
+        if len(w.strip("?.,!\"'()")) >= 4
+        and w.strip("?.,!\"'()").lower() not in stop_words
+    ]
+
+    passing_hits = [h for h in hits if h["score"] <= RELEVANCE_SCORE_THRESHOLD]
+    if passing_hits and significant_words:
+        # Check if any passing result actually mentions a query keyword
+        has_keyword_overlap = any(
+            any(kw in h["content"].lower() for kw in significant_words)
+            for h in passing_hits
+        )
+        if has_keyword_overlap:
+            return hits
+
+    # --- 2. Fallback: keyword search ---
+    # Vector search failed — try exact keyword matching.
+    # Extract significant words (4+ chars, skip common words).
+    stop_words = {
+        "what", "does", "how", "why", "who", "when", "where", "which",
+        "the", "is", "are", "was", "were", "been", "being", "have", "has",
+        "had", "did", "will", "would", "could", "should", "can", "may",
+        "about", "from", "with", "that", "this", "for", "and", "but",
+        "not", "they", "them", "their", "its", "into", "also", "than",
+        "then", "more", "most", "such", "like", "argue", "between",
+    }
+    words = [w.strip("?.,!\"'()") for w in query.split() if len(w) >= 4]
+    keywords = [w for w in words if w.lower() not in stop_words]
+
+    if not keywords:
+        return hits  # nothing to search for
+
+    # Search each keyword with case variants (ChromaDB $contains is case-sensitive)
+    seen_ids = set()
+    keyword_hits = []
+
+    for kw in keywords:
+        for variant in {kw, kw.lower(), kw.capitalize()}:
+            try:
+                kw_results = collection.get(
+                    where_document={"$contains": variant},
+                    include=["documents", "metadatas"],
+                    limit=top_k,
+                )
+                if kw_results and kw_results["ids"]:
+                    for cid, doc, meta in zip(
+                        kw_results["ids"],
+                        kw_results["documents"],
+                        kw_results["metadatas"],
+                    ):
+                        if cid not in seen_ids:
+                            seen_ids.add(cid)
+                            keyword_hits.append({
+                                "content": doc,
+                                "metadata": meta,
+                                "score": 0.30,  # good enough to pass threshold
+                            })
+            except Exception:
+                continue
+
+    return keyword_hits[:top_k] if keyword_hits else hits
 
 
 def delete_by_doc_id(doc_id: str) -> int:

@@ -13,7 +13,9 @@ class ChatRequest(BaseModel):
 
 class SourceInfo(BaseModel):
     doc_id: str
+    chunk_index: int
     score: float
+    excerpt: str
 
 
 class ChatResponse(BaseModel):
