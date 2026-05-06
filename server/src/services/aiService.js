@@ -12,11 +12,11 @@ const AI_BASE = config.aiServiceUrl;
 /**
  * Send a chat query to the AI service.
  */
-export async function queryAI(question) {
+export async function queryAI(question, history = []) {
   const res = await fetch(`${AI_BASE}/ai/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
   });
 
   if (!res.ok) {

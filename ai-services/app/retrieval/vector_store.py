@@ -94,60 +94,55 @@ def search(query: str, top_k: int = RETRIEVAL_TOP_K) -> list[dict]:
     collection = _get_collection()
     embeddings = _get_embeddings()
 
-    # --- 1. Vector similarity search ---
+    # --- 1. Per-document vector search ---
+    # Query each document separately so every document gets representation.
+    # This prevents broad queries from only returning chunks from one doc.
     query_vector = embeddings.embed_query(query)
 
-    results = collection.query(
-        query_embeddings=[query_vector],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"],
-    )
+    # Get all unique doc_ids in the collection
+    all_meta = collection.get(include=["metadatas"])
+    doc_ids = list({m["doc_id"] for m in all_meta["metadatas"] if "doc_id" in m})
 
+    if not doc_ids:
+        return []
+
+    # Query each document for its best chunks
+    chunks_per_doc = max(2, top_k // len(doc_ids))  # at least 2 per doc
     hits = []
-    if results and results["documents"] and results["documents"][0]:
-        for doc, meta, dist in zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-        ):
-            hits.append({
-                "content": doc,
-                "metadata": meta,
-                "score": dist,
-            })
 
-    # Check if vector search found anything useful.
-    # Two conditions must be met to trust vector results:
-    #   a) At least one result passes the relevance threshold
-    #   b) At least one passing result contains a significant query keyword
-    # This prevents trusting high-scoring but irrelevant results (common
-    # when the query contains proper nouns the embedding model doesn't handle).
+    for doc_id in doc_ids:
+        try:
+            results = collection.query(
+                query_embeddings=[query_vector],
+                n_results=chunks_per_doc,
+                where={"doc_id": doc_id},
+                include=["documents", "metadatas", "distances"],
+            )
+
+            if results and results["documents"] and results["documents"][0]:
+                for doc, meta, dist in zip(
+                    results["documents"][0],
+                    results["metadatas"][0],
+                    results["distances"][0],
+                ):
+                    hits.append({
+                        "content": doc,
+                        "metadata": meta,
+                        "score": dist,
+                    })
+        except Exception:
+            continue
+
+    # Sort all hits by score and return top_k
+    hits.sort(key=lambda h: h["score"])
+    hits = hits[:top_k]
+
+    # Check if vector search found anything useful
     from app.core.config import RELEVANCE_SCORE_THRESHOLD
-
-    stop_words = {
-        "what", "does", "how", "why", "who", "when", "where", "which",
-        "the", "is", "are", "was", "were", "been", "being", "have", "has",
-        "had", "did", "will", "would", "could", "should", "can", "may",
-        "about", "from", "with", "that", "this", "for", "and", "but",
-        "not", "they", "them", "their", "its", "into", "also", "than",
-        "then", "more", "most", "such", "like", "argue", "between",
-    }
-    significant_words = [
-        w.strip("?.,!\"'()").lower()
-        for w in query.split()
-        if len(w.strip("?.,!\"'()")) >= 4
-        and w.strip("?.,!\"'()").lower() not in stop_words
-    ]
-
     passing_hits = [h for h in hits if h["score"] <= RELEVANCE_SCORE_THRESHOLD]
-    if passing_hits and significant_words:
-        # Check if any passing result actually mentions a query keyword
-        has_keyword_overlap = any(
-            any(kw in h["content"].lower() for kw in significant_words)
-            for h in passing_hits
-        )
-        if has_keyword_overlap:
-            return hits
+
+    if passing_hits:
+        return hits
 
     # --- 2. Fallback: keyword search ---
     # Vector search failed — try exact keyword matching.

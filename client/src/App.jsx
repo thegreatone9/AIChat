@@ -25,12 +25,18 @@ export default function App() {
 
   // Handle sending a chat message
   const handleSend = async (question) => {
-    // Add user message
+    // Build history from the last 10 messages (5 exchanges) before adding new one
+    const history = messages.slice(-10).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    // Add user message to UI
     setMessages((prev) => [...prev, { role: 'user', content: question }]);
     setLoading(true);
 
     try {
-      const data = await sendMessage(question);
+      const data = await sendMessage(question, history);
       setMessages((prev) => [
         ...prev,
         {

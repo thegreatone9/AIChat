@@ -7,8 +7,14 @@ from pydantic import BaseModel, Field
 
 # --- Chat ---
 
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
+    history: list[ChatMessage] = []
 
 
 class SourceInfo(BaseModel):

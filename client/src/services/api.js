@@ -7,11 +7,11 @@ const BASE = '/api';
 /**
  * Send a chat message and get an AI response.
  */
-export async function sendMessage(question) {
+export async function sendMessage(question, history = []) {
   const res = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
   });
 
   if (!res.ok) {

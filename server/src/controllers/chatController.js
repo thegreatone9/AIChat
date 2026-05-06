@@ -11,15 +11,15 @@ import logger from '../utils/logger.js';
  */
 export async function sendMessage(req, res, next) {
   try {
-    const { question } = req.body;
+    const { question, history = [] } = req.body;
 
     if (!question || !question.trim()) {
       return res.status(400).json({ error: 'Question is required.' });
     }
 
-    logger.info(`Chat query: "${question.substring(0, 80)}..."`);
+    logger.info(`Chat query: "${question.substring(0, 80)}..." (${history.length} history msgs)`);
 
-    const result = await queryAI(question.trim());
+    const result = await queryAI(question.trim(), history);
 
     return res.json({
       answer: result.answer,

@@ -16,11 +16,11 @@ SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based O
 
 Rules:
 1. Answer the question using ONLY the information in the context below.
-2. If the context does not contain enough information to answer the question, respond with:
-   "I couldn't find an answer to that in the knowledge base. Could you try rephrasing your question or asking about a different topic?"
-3. Do NOT make up information or use knowledge outside the provided context.
-4. Be concise and direct in your answers.
-5. If relevant, mention which part of the knowledge base your answer comes from.
+2. If the context does not contain enough information, say ONLY:
+   "I couldn't find an answer to that in the knowledge base."
+3. NEVER combine a real answer with the "couldn't find" message. Either answer the question OR say you couldn't find it — never both.
+4. Do NOT make up information or use knowledge outside the provided context.
+5. Be concise and direct in your answers.
 
 Context:
 {context}
@@ -42,20 +42,24 @@ def _get_llm():
     return _llm
 
 
-def query(question: str) -> dict:
+def query(question: str, history: list = None) -> dict:
     """
     Execute the full RAG pipeline:
     1. Search vector store for relevant chunks
     2. Filter by relevance score
-    3. Build prompt with context
+    3. Build prompt with context + conversation history
     4. Generate answer via Ollama
 
     Args:
         question: The user's question.
+        history: List of previous messages [{"role": "user"|"assistant", "content": "..."}].
 
     Returns:
         Dict with 'answer', 'sources', and 'has_context' keys.
     """
+    if history is None:
+        history = []
+
     # Step 1: Retrieve relevant chunks
     raw_results = search(question)
 
@@ -66,11 +70,8 @@ def query(question: str) -> dict:
     ]
 
     # Step 2b: Relative score gap — only keep chunks close to the best match.
-    # If the best chunk scores 0.20, a chunk at 0.50 is likely noise even
-    # though it passes the absolute threshold.  Keep chunks within 1.5x of
-    # the best score so only genuinely relevant ones survive.
     if relevant_chunks:
-        best_score = relevant_chunks[0]["score"]  # already sorted by ChromaDB
+        best_score = relevant_chunks[0]["score"]
         score_cutoff = best_score * 1.5
         relevant_chunks = [
             r for r in relevant_chunks
@@ -92,12 +93,20 @@ def query(question: str) -> dict:
     # Step 4: Build context string from relevant chunks
     context = "\n\n---\n\n".join([c["content"] for c in relevant_chunks])
 
-    # Step 5: Build messages and query LLM
+    # Step 5: Build messages with conversation history and query LLM
     llm = _get_llm()
     messages = [
         ("system", SYSTEM_PROMPT.format(context=context)),
-        ("human", question),
     ]
+
+    # Include last 5 exchanges (10 messages) for conversational context
+    recent_history = history[-10:]
+    for msg in recent_history:
+        role = msg["role"] if isinstance(msg, dict) else msg.role
+        content = msg["content"] if isinstance(msg, dict) else msg.content
+        messages.append((role if role == "human" else "human" if role == "user" else "ai", content))
+
+    messages.append(("human", question))
 
     response = llm.invoke(messages)
 
@@ -109,17 +118,29 @@ def query(question: str) -> dict:
         "not enough information",
         "don't have enough context",
         "no information available",
-        "not mentioned in",
-        "not covered in",
     ]
-    is_fallback = any(phrase in answer_text.lower() for phrase in fallback_phrases)
+    has_fallback_phrase = any(phrase in answer_text.lower() for phrase in fallback_phrases)
 
-    if is_fallback:
-        return {
-            "answer": answer_text,
-            "sources": [],
-            "has_context": False,
-        }
+    if has_fallback_phrase:
+        # If the answer is short, the LLM genuinely couldn't answer
+        if len(answer_text) < 200:
+            return {
+                "answer": answer_text,
+                "sources": [],
+                "has_context": False,
+            }
+        # If the answer is long, the LLM answered but hedged at the end.
+        # Strip the trailing fallback sentence and keep the real answer.
+        for phrase in fallback_phrases:
+            idx = answer_text.lower().find(phrase)
+            if idx > 0:
+                # Find the start of the sentence containing the fallback
+                last_newline = answer_text.rfind('\n', 0, idx)
+                last_period = answer_text.rfind('.', 0, idx)
+                cut_point = max(last_newline, last_period)
+                if cut_point > 0:
+                    answer_text = answer_text[:cut_point + 1].strip()
+                break
 
     # Step 7: Collect sources with text excerpts
     sources = []

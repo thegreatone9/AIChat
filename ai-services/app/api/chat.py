@@ -15,7 +15,7 @@ def chat_query(request: ChatRequest):
     Send a question to the RAG pipeline.
     Retrieves relevant context from the knowledge base and generates an answer.
     """
-    result = query(request.question)
+    result = query(request.question, history=request.history)
 
     return ChatResponse(
         answer=result["answer"],

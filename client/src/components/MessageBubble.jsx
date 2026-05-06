@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 export default function MessageBubble({ role, content, sources }) {
   const [showSources, setShowSources] = useState(false);
@@ -11,7 +12,11 @@ export default function MessageBubble({ role, content, sources }) {
         {role === 'user' ? 'U' : '✦'}
       </div>
       <div className="message-content">
-        {content}
+        {role === 'assistant' ? (
+          <ReactMarkdown>{content}</ReactMarkdown>
+        ) : (
+          content
+        )}
 
         {hasSources && (
           <div className="message-sources-section">
