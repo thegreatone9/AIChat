@@ -23,7 +23,8 @@ export async function sendMessage(question, history = []) {
 }
 
 /**
- * Upload a PDF document to the knowledge base.
+ * Upload a document to the knowledge base.
+ * Supports: PDF, TXT, Markdown, DOCX, CSV.
  */
 export async function uploadDocument(file) {
   const formData = new FormData();
@@ -37,6 +38,24 @@ export async function uploadDocument(file) {
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Ingest a web page URL into the knowledge base.
+ */
+export async function ingestUrl(url) {
+  const res = await fetch(`${BASE}/knowledge/ingest-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `URL ingestion failed: ${res.status}`);
   }
 
   return res.json();

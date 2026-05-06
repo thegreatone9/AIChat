@@ -31,10 +31,23 @@ export async function queryAI(question, history = []) {
 /**
  * Send a file to the AI service for ingestion.
  * Reads the file from disk and re-uploads it as multipart/form-data.
+ * Supports: PDF, TXT, Markdown, DOCX, CSV.
  */
 export async function ingestDocument(filePath, filename) {
   const fileBuffer = fs.readFileSync(filePath);
-  const blob = new Blob([fileBuffer], { type: 'application/pdf' });
+
+  // Detect MIME type from extension
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const mimeTypes = {
+    pdf: 'application/pdf',
+    txt: 'text/plain',
+    md: 'text/markdown',
+    csv: 'text/csv',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  const mime = mimeTypes[ext] || 'application/octet-stream';
+
+  const blob = new Blob([fileBuffer], { type: mime });
 
   const formData = new FormData();
   formData.append('file', blob, filename);
@@ -48,6 +61,25 @@ export async function ingestDocument(filePath, filename) {
     const error = await res.text();
     logger.error(`AI ingestion failed: ${res.status} — ${error}`);
     throw new Error(`AI ingestion error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Send a URL to the AI service for web page ingestion.
+ */
+export async function ingestUrlContent(url) {
+  const res = await fetch(`${AI_BASE}/ai/ingest-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    logger.error(`AI URL ingestion failed: ${res.status} — ${error}`);
+    throw new Error(`AI URL ingestion error: ${res.status}`);
   }
 
   return res.json();

@@ -263,6 +263,72 @@ body {
   background: rgba(248, 113, 113, 0.15);
 }
 
+/* URL ingestion */
+.url-toggle-btn {
+  width: 100%;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.url-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.url-input-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.url-input {
+  flex: 1;
+  padding: 7px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.url-input:focus {
+  border-color: var(--accent);
+}
+
+.url-input::placeholder {
+  color: var(--text-muted);
+}
+
+.url-submit-btn {
+  padding: 7px 14px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.url-submit-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.url-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ===========================
    Chat Area
    =========================== */

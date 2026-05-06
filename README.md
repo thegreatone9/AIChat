@@ -7,29 +7,40 @@ An intelligent chatbot that answers questions using only your uploaded documents
 ### The Big Picture
 
 ```
-  You upload a PDF               You ask a question
-        │                               │
-        ▼                               ▼
-  ┌───────────┐  Extract    ┌─────────────────────────┐
-  │    PDF    │──────────▶ │  1. Per-doc vector search │
-  │  Upload   │   & chunk   │  2. Keyword fallback     │
-  └───────────┘     │       │  3. Score gap filter      │
-                    ▼       │  4. Build prompt + history│
-              ┌──────────┐  │  5. LLM generates answer │
-              │ ChromaDB │  └────────────┬────────────┘
-              │ (vectors)│◀──────────────┘
+  You upload a document          You ask a question
+  (PDF/TXT/DOCX/MD/CSV/URL)             │
+        │                               ▼
+        ▼                     ┌─────────────────────────┐
+  ┌───────────┐  Extract     │  1. Per-doc vector search │
+  │  Upload / │──────────▶  │  2. Keyword fallback     │
+  │  Scrape   │   & chunk    │  3. Score gap filter      │
+  └───────────┘     │        │  4. Build prompt + history│
+                    ▼        │  5. LLM generates answer │
+              ┌──────────┐   └────────────┬────────────┘
+              │ ChromaDB │                │
+              │ (vectors)│◀───────────────┘
               └──────────┘        ▼
                          Answer + Sources (with excerpts)
 ```
 
 ### Document Ingestion
 
-When you upload a PDF:
+The knowledge base accepts multiple formats:
 
-1. **Text Extraction** — PyPDF extracts all text content from the PDF
-2. **Chunking** — Text is split into ~500 character chunks with 100 char overlap using LangChain's `RecursiveCharacterTextSplitter`, preserving sentence boundaries
-3. **Embedding** — Each chunk is converted to a vector using Ollama's `nomic-embed-text` model
-4. **Storage** — Vectors are persisted in ChromaDB with the original text and metadata (doc ID, chunk index)
+| Format | How it's extracted |
+|---|---|
+| **PDF** (`.pdf`) | PyPDF extracts text from all pages |
+| **Plain Text** (`.txt`) | Read directly |
+| **Markdown** (`.md`) | Read directly |
+| **Word** (`.docx`) | python-docx extracts paragraph text |
+| **CSV** (`.csv`) | Read as plain text |
+| **Web page** (URL) | Fetched with requests, parsed with BeautifulSoup (scripts/nav/footers stripped) |
+
+After extraction:
+
+1. **Chunking** — Text is split into ~500 character chunks with 100 char overlap using LangChain's `RecursiveCharacterTextSplitter`, preserving sentence boundaries
+2. **Embedding** — Each chunk is converted to a vector using Ollama's `nomic-embed-text` model
+3. **Storage** — Vectors are persisted in ChromaDB with the original text and metadata (doc ID, chunk index)
 
 ### Question Answering (RAG Pipeline)
 
@@ -143,9 +154,9 @@ LLM responses are rendered as rich markdown in the UI — **bold text**, numbere
 
 | Layer | Tech | Responsibility |
 |---|---|---|
-| **Client** | Vite + React (JS) | Chat UI with markdown rendering, collapsible sources, document sidebar |
-| **Server** | Node.js + Express | API gateway, file handling (Multer), document metadata (SQLite) |
-| **AI Services** | Python + FastAPI | PDF extraction, chunking, embedding, RAG pipeline with memory |
+| **Client** | Vite + React (JS) | Chat UI with markdown rendering, collapsible sources, multi-format upload + URL ingestion |
+| **Server** | Node.js + Express | API gateway, file handling (Multer for PDF/TXT/MD/DOCX/CSV), document metadata (SQLite) |
+| **AI Services** | Python + FastAPI | Multi-format text extraction, web scraping, chunking, embedding, RAG pipeline with memory |
 | **Vector Store** | ChromaDB | Persistent vector storage with per-document cosine similarity search |
 | **LLM** | Ollama (local) | `qwen2.5:7b` for generation, `nomic-embed-text` for embeddings |
 
@@ -169,9 +180,9 @@ AIChat/
 │       └── utils/           # Logger
 ├── ai-services/             # AI Microservice — Python + FastAPI
 │   ├── app/
-│   │   ├── api/             # /ai/query, /ai/ingest, /ai/documents endpoints
+│   │   ├── api/             # /ai/query, /ai/ingest, /ai/ingest-url, /ai/documents
 │   │   ├── core/            # Config, RAG chain (prompt + memory + fallback)
-│   │   ├── ingestion/       # PDF loader, text splitter
+│   │   ├── ingestion/       # Multi-format loader (PDF/TXT/MD/DOCX/CSV/URL), text splitter
 │   │   ├── retrieval/       # ChromaDB vector store (per-doc search + keyword fallback)
 │   │   └── schemas/         # Pydantic request/response models
 │   └── data/                # Vector store + uploads (gitignored)
@@ -247,14 +258,16 @@ All can be overridden via environment variables.
 ### Knowledge Base
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/knowledge/upload` | Upload a PDF (max 100MB) |
+| `POST` | `/api/knowledge/upload` | Upload a file — PDF, TXT, MD, DOCX, CSV (max 100MB) |
+| `POST` | `/api/knowledge/ingest-url` | Scrape and ingest a web page by URL |
 | `GET` | `/api/knowledge/documents` | List all documents |
 | `DELETE` | `/api/knowledge/:id` | Delete a document and all its embeddings |
 
 ### AI Service (internal)
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/ai/ingest` | Ingest a PDF into the vector store |
+| `POST` | `/ai/ingest` | Ingest a file into the vector store |
+| `POST` | `/ai/ingest-url` | Fetch and ingest a web page |
 | `POST` | `/ai/query` | RAG query with conversation history |
 | `DELETE` | `/ai/documents/:id` | Remove document embeddings |
 | `GET` | `/ai/health` | Health check with vector store stats |

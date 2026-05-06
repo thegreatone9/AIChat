@@ -1,5 +1,5 @@
 /**
- * Knowledge base routes — upload, list, delete documents.
+ * Knowledge base routes — upload files, ingest URLs, list, and delete documents.
  */
 
 import { Router } from 'express';
@@ -9,6 +9,7 @@ import fs from 'fs';
 import config from '../config/index.js';
 import {
   uploadDocument,
+  ingestUrl,
   listDocuments,
   deleteDocument,
 } from '../controllers/knowledgeController.js';
@@ -18,7 +19,10 @@ if (!fs.existsSync(config.uploadDir)) {
   fs.mkdirSync(config.uploadDir, { recursive: true });
 }
 
-// Multer config — save uploaded PDFs to disk
+// Supported file extensions
+const ALLOWED_EXTENSIONS = new Set(['.pdf', '.txt', '.md', '.docx', '.csv']);
+
+// Multer config — save uploaded files to disk
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, config.uploadDir),
   filename: (req, file, cb) => {
@@ -32,8 +36,8 @@ const upload = multer({
   limits: { fileSize: config.maxFileSize },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ext !== '.pdf') {
-      return cb(new Error('Only PDF files are allowed.'));
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error(`Unsupported file type '${ext}'. Supported: ${[...ALLOWED_EXTENSIONS].join(', ')}`));
     }
     cb(null, true);
   },
@@ -42,6 +46,7 @@ const upload = multer({
 const router = Router();
 
 router.post('/upload', upload.single('file'), uploadDocument);
+router.post('/ingest-url', ingestUrl);
 router.get('/', listDocuments);
 router.delete('/:id', deleteDocument);
 
